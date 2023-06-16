@@ -62,3 +62,8 @@
 *.out
 *.app
 
+# path
+cmake-build-*
+
+compile_commands.json
+.cache

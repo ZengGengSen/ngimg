@@ -1,0 +1,4 @@
+{
+  "clangd.enabled": true,
+  "semanticTokens.enable": true
+}
