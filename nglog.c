@@ -33,6 +33,7 @@ void NG_LOG_V(const char *tag, const char *fmt, va_list ap) {
     {
         fprintf(fp, "%s ", tag_v);
         vfprintf(fp, fmt, ap);
+        fprintf(fp, "\n");
         fflush(fp);
     }
 }

@@ -1,0 +1,15 @@
+[package]
+name = "sp2"
+version = "0.1.0"
+description = "A neogeo palette editor."
+edition = "2021"
+license = "MIT"
+include = ["src/**/*", "README.md"]
+
+[[bin]]
+name = "pa"
+path = "src/main.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]

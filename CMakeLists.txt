@@ -4,7 +4,6 @@ option(HAVE_LOGGER "have logger" ON)
 
 project(ngimg)
 
-
 add_executable(${PROJECT_NAME} main.c)
 
 #[[
@@ -23,12 +22,11 @@ target_include_directories(${PROJECT_NAME} PRIVATE deps/imgui deps/imgui/backend
 target_link_libraries(${PROJECT_NAME} PRIVATE ${OPENGL_LIBRARIES})
 ]]
 
-add_subdirectory(deps/SDL)
+# add_subdirectory(deps/SDL)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2)
+# target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2)
 
 if (HAVE_LOGGER)
     target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_LOGGER)
-    target_sources(${PROJECT_NAME} PRIVATE
-        nglog.c)
+    target_sources(${PROJECT_NAME} PRIVATE nglog.c)
 endif()
