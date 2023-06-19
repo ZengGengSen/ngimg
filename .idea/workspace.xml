@@ -24,14 +24,7 @@
     <cargoProject FILE="$PROJECT_DIR$/sp2/Cargo.toml" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c7112153-dbaa-4ddf-b1a5-df9cb6cf1915" name="更改" comment="add logger system">
-      <change afterPath="$PROJECT_DIR$/sp2/.gitignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Makefile" beforeDir="false" afterPath="$PROJECT_DIR$/Makefile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sp2/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/sp2/src/main.rs" afterDir="false" />
-    </list>
+    <list default="true" id="c7112153-dbaa-4ddf-b1a5-df9cb6cf1915" name="更改" comment="add sp2 file system" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -119,7 +112,7 @@
       <updated>1686883180960</updated>
       <workItem from="1686883188367" duration="21577000" />
       <workItem from="1686971722975" duration="11179000" />
-      <workItem from="1687133753409" duration="71000" />
+      <workItem from="1687133753409" duration="241000" />
     </task>
     <task id="LOCAL-00001" summary="add logger system">
       <created>1686883875581</created>
@@ -128,7 +121,14 @@
       <option name="project" value="LOCAL" />
       <updated>1686883875581</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="add sp2 file system">
+      <created>1687133858733</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1687133858733</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -140,8 +140,20 @@
     <isAutomaticFoundErrors value="true" />
     <isAutomaticFoundErrors value="true" />
   </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="add logger system" />
-    <option name="LAST_COMMIT_MESSAGE" value="add logger system" />
+    <MESSAGE value="add sp2 file system" />
+    <option name="LAST_COMMIT_MESSAGE" value="add sp2 file system" />
   </component>
 </project>

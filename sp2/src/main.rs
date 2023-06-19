@@ -1,4 +1,7 @@
 #![allow(dead_code, unused_imports)]
+use core::fmt;
+use std::collections::btree_map::Values;
+use std::fmt::write;
 use std::fs::File;
 use std::io::{self, Seek, Read};
 use sp2::palette::Palette;
@@ -32,6 +35,48 @@ fn get_all_palette() -> io::Result<()> {
 
     println!("HelloWorld!");
     Ok(())
+}
+
+struct FrameDefinition {
+    palette: u8,
+    width: u8,
+    height: u8,
+    bitmap: Vec<u16>,
+    tile_offset: Vec<u32>,
+}
+
+impl fmt::Display for FrameDefinition {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Frame Definition:")?;
+        writeln!(f, "Palette: {}", self.palette)?;
+        writeln!(f, "Width: {}", self.width)?;
+        writeln!(f, "Height: {}", self.height)?;
+        for i in 0 .. self.height {
+            let bit_mask = 1 << (15 - i);
+
+            for j in 0 .. self.width as usize {
+                let mask = self.bitmap[j];
+
+                if mask & bit_mask == bit_mask {
+                    write!(f, "1")?;
+                } else {
+                    write!(f, "0")?;
+                }
+            }
+            write!(f, "\n")?;
+        }
+        // writeln!(f, "Bitmap: {:04x?}", self.bitmap)?;
+        writeln!(f, "Tile Offset: {:05x?}", self.tile_offset)?;
+        Ok(())
+    }
+}
+
+impl FrameDefinition {
+    pub fn new(palette: u8, width: u8, height: u8, bitmap: Vec<u16>, tile_offset: Vec<u32>) -> FrameDefinition {
+        FrameDefinition {
+            palette, width, height, bitmap, tile_offset,
+        }
+    }
 }
 
 fn get_all_frame_definition() -> io::Result<()> {
@@ -72,249 +117,219 @@ fn get_all_frame_definition() -> io::Result<()> {
             let height = buffer[offset];
             offset += 1;
 
-            print!("{:02x} {:03x} {:02x} {:02x} {:02x} {:02x} ", ch_id, i, palette_id, draw_type, width, height);
+            // print!("{:02x} {:03x} {:02x} {:02x} {:02x} {:02x} ", ch_id, i, palette_id, draw_type, width, height);
+            println!("CH_CODE: {:02x}, Index: {} Formatter: {:02x}", ch_id, i, draw_type);
 
             match draw_type {
                 0x00 | 0x04 => {
-                    let tile_base_offset = u32::from_be_bytes(buffer[offset .. offset + 4].try_into().unwrap());
+                    let tile_base_offset = u32::from_be_bytes([buffer[offset], buffer[offset + 1], buffer[offset + 2], buffer[offset + 3]]);
                     offset += 4;
 
-                    print!("{:08x} ", tile_base_offset);
-                    for _ in 0 .. width {
-                        print!("{:04x} ", u16::from_be_bytes(buffer[offset .. offset + 2].try_into().unwrap()));
-                        offset += 2;
-                    }
+                    let bitmap: Vec<u16> = buffer[offset .. offset + width as usize * 2].chunks(2).map(|chunk| u16::from_be_bytes([chunk[0], chunk[1]])).collect();
+                    offset += width as usize * 2;
+
+                    let count = bitmap.iter().fold(0, |acc, &value| acc + value.count_ones()) as usize;
+                    let tile_offset_list: Vec<u32> = buffer[offset .. offset + count].iter().enumerate().map(|(index, _)| tile_base_offset + index as u32).collect();
+
+                    let frame = FrameDefinition::new(palette_id, width, height, bitmap, tile_offset_list);
+                    print!("{}", frame);
                 },
                 0x01 => {
-                    let tile_base_offset = u32::from_be_bytes(buffer[offset .. offset + 4].try_into().unwrap());
+                    let tile_base_offset = u32::from_be_bytes([buffer[offset], buffer[offset + 1], buffer[offset + 2], buffer[offset + 3]]);
                     offset += 4;
 
-                    print!("{:08x} ", tile_base_offset);
-                    for _ in 0 .. width {
-                        print!("{:02x} ", buffer[offset]);
-                        offset += 1;
-                    };
+                    let bitmap: Vec<u16> = buffer[offset .. offset + width as usize].iter().map(|value| (*value as u16) << 8).collect();
+                    offset += width as usize;
 
-                    if offset & 1 != 0 {
-                        print!("{:02x} ", buffer[offset]);
-                        offset += 1;
-                    };
+                    let count = bitmap.iter().fold(0, |acc, &value| acc + value.count_ones()) as usize;
+                    let tile_offset_list: Vec<u32> = buffer[offset .. offset + count].iter().enumerate().map(|(index, _)| tile_base_offset + index as u32).collect();
+
+                    if offset & 1 != 0 { offset += 1; };
+
+                    let frame = FrameDefinition::new(palette_id, width, height, bitmap, tile_offset_list);
+                    print!("{}", frame);
                 },
                 0x02 => {
-                    for _ in 0 .. width {
-                        for _ in 0 .. height {
-                            print!("{:02x} {:04x}", buffer[offset], u16::from_be_bytes([buffer[offset + 1], buffer[offset + 2]]));
-                            offset += 3;
-                        }
-                    };
+                    let bitmap: Vec<u16> = vec![(((1u32 << (height + 1)) - 1) << (16 - height) & 0xffff) as u16; width as usize]; 
 
-                    if offset & 1 != 0 {
-                        print!("{:02x} ", buffer[offset]);
-                        offset += 1;
-                    };
+                    let count = (width * height) as usize;
+                    let tile_offset_list: Vec<u32> = buffer[offset .. offset + count * 3]
+                        .chunks(3)
+                        .map(|chunk| {
+                            (chunk[0] as u32) << 12 | u16::from_be_bytes([chunk[1], chunk[2]]) as u32
+                        })
+                        .collect();
+                    offset += count * 3;
+
+                    if offset & 1 != 0 { offset += 1; };
+
+                    let frame = FrameDefinition::new(palette_id, width, height, bitmap, tile_offset_list);
+                    print!("{}", frame);
                 },
                 0x03 => {
-                    let tile_hi_base_offset = u16::from_be_bytes([buffer[offset], buffer[offset + 1]]);
+                    let tile_hi_base_offset = (u16::from_be_bytes([buffer[offset], buffer[offset + 1]]) as u32) << 12;
                     offset += 2;
-                    print!("    {:04x} ", tile_hi_base_offset);
 
-                    for _ in 0 .. width {
-                        for _ in 0 .. height {
-                            print!("{:04x} ", u16::from_be_bytes([buffer[offset], buffer[offset + 1]]));
-                            offset += 2;
-                        }
-                    };
+                    println!("{}, {}", width, height);
+                    let bitmap: Vec<u16> = vec![(((1u32 << (height + 1)) - 1) << (16 - height) & 0xffff) as u16; width as usize]; 
+
+                    let count = (width * height) as usize;
+                    let tile_offset_list: Vec<u32> = buffer[offset .. offset + count * 2]
+                        .chunks(2)
+                        .map(|chunk| {
+                            tile_hi_base_offset + u16::from_be_bytes([chunk[0], chunk[1]]) as u32
+                        })
+                        .collect();
+                    offset += count * 2;
+
+                    let frame = FrameDefinition::new(palette_id, width, height, bitmap, tile_offset_list);
+                    print!("{}", frame);
                 },
                 0x05 => {
-                    let mut offset_inc = width as usize * 2 + offset;
+                    let bitmap: Vec<u16> = buffer[offset .. offset + 2 * width as usize]
+                        .chunks(2)
+                        .map(|chunk| {
+                            u16::from_be_bytes([chunk[0], chunk[1]])
+                        })
+                        .collect();
+                    offset += 2 * width as usize;
 
-                    for _ in 0 .. width {
-                        let mut mask = u16::from_be_bytes([buffer[offset], buffer[offset + 1]]);
-                        offset += 2;
+                    let count = bitmap.iter().fold(0, |acc, &value| acc + value.count_ones()) as usize;
 
-                        print!("{:04x}[ ", mask);
+                    let mut swap_tpggle = false;
+                    let tile_offset_list: Vec<u32> = buffer[offset .. offset + count * 3]
+                        .chunks(3)
+                        .map(|chunk| {
+                            swap_tpggle = !swap_tpggle;
+                            if swap_tpggle {
+                                let hi = (chunk[0] as u32) << 12;
+                                let lo = u16::from_be_bytes([chunk[1], chunk[2]]) as u32;
+                                hi | lo
+                            } else {
+                                let lo = u16::from_be_bytes([chunk[0], chunk[1]]) as u32;
+                                let hi = (chunk[2] as u32) << 12;
+                                hi | lo
+                            }
+                        })
+                        .collect();
+                    offset += 3 * count;
 
-                        let mut swap_toggle = false;
-                        for _ in 0 .. height {
-                            if mask & 0x8000 == 0x8000 {
-                                if swap_toggle {
-                                    print!("{:02x} {:04x} ", buffer[offset_inc], u16::from_be_bytes([buffer[offset_inc + 1], buffer[offset_inc + 2]]));
-                                } else {
-                                    print!("{:04x} {:02x} ", u16::from_be_bytes([buffer[offset_inc], buffer[offset_inc + 1]]), buffer[offset_inc + 2]);
-                                };
-                                offset_inc += 3;
-                            };
-                            swap_toggle = !swap_toggle;
-                            mask <<= 1;
-                        };
+                    if offset & 1 != 0 { offset += 1; };
 
-                        print!("] ");
-                    };
-
-                    offset = offset_inc;
-
-                    if offset & 1 != 0 {
-                        print!("({:02x})", buffer[offset]);
-                        offset += 1;
-                    };
+                    let frame = FrameDefinition::new(palette_id, width, height, bitmap, tile_offset_list);
+                    print!("{}", frame);
                 },
                 0x06 => {
-                    let mut offset_inc = width as usize + offset;
- 
-                    if offset_inc & 1 != 0 {
-                        offset_inc += 1;
-                    };
+                    let bitmap: Vec<u16> = buffer[offset .. offset + width as usize].iter().map(|value| (*value as u16) << 8).collect();
+                    offset += width as usize;
 
-                    for _ in 0 .. width {
-                        let mut mask = buffer[offset];
-                        offset += 1;
+                    if offset & 1 != 0 { offset += 1; };
+                    
+                    let count = bitmap.iter().fold(0, |acc, &value| acc + value.count_ones()) as usize;
 
-                        print!("{:02x}[ ", mask);
+                    let mut swap_tpggle = false;
+                    let tile_offset_list: Vec<u32> = buffer[offset .. offset + count * 3]
+                        .chunks(3)
+                        .map(|chunk| {
+                            swap_tpggle = !swap_tpggle;
+                            if swap_tpggle {
+                                let hi = (chunk[0] as u32) << 12;
+                                let lo = u16::from_be_bytes([chunk[1], chunk[2]]) as u32;
+                                hi | lo
+                            } else {
+                                let lo = u16::from_be_bytes([chunk[0], chunk[1]]) as u32;
+                                let hi = (chunk[2] as u32) << 12;
+                                hi | lo
+                            }
+                        }).collect();
+                    offset += 3 * count;
 
-                        let mut swap_toggle = false;
-                        for _ in 0 .. height {
-                            if mask & 0x80 == 0x80 {
-                                if swap_toggle {
-                                    print!("{:02x} {:04x} ", buffer[offset_inc], u16::from_be_bytes([buffer[offset_inc + 1], buffer[offset_inc + 2]]));
-                                } else {
-                                    print!("{:04x} {:02x} ", u16::from_be_bytes([buffer[offset_inc], buffer[offset_inc + 1]]), buffer[offset_inc + 2]);
-                                };
-                                offset_inc += 3;
-                            };
-                            swap_toggle = !swap_toggle;
-                            mask <<= 1;
-                        };
+                    if offset & 1 != 0 { offset += 1; };
 
-                        print!("] ");
-                    };
-
-                    if offset & 1 != 0 {
-                        print!("({:02x})", buffer[offset]);
-                    };
-
-                    offset = offset_inc;
-
-                    if offset & 1 != 0 {
-                        print!("({:02x})", buffer[offset]);
-                        offset += 1;
-                    };
+                    let frame = FrameDefinition::new(palette_id, width, height, bitmap, tile_offset_list);
+                    print!("{}", frame);
                 },
                 0x07 => {
-                    let tile_hi_base_offset = u16::from_be_bytes([buffer[offset], buffer[offset + 1]]);
+                    let tile_hi_base_offset = (u16::from_be_bytes([buffer[offset], buffer[offset + 1]]) as u32) << 12;
                     offset += 2;
-                    print!("    {:04x} ", tile_hi_base_offset);
 
-                    let mut offset_inc = 2 * width as usize + offset;
-                    for _ in 0 .. width {
-                        let mut mask = u16::from_be_bytes([buffer[offset], buffer[offset + 1]]);
-                        offset += 2;
-                        print!("{:04x}[ ", mask);
+                    let bitmap: Vec<u16> = buffer[offset .. offset + 2 * width as usize]
+                        .chunks(2)
+                        .map(|chunk| {
+                            u16::from_be_bytes([chunk[0], chunk[1]])
+                        })
+                        .collect();
+                    offset += 2 * width as usize;
 
-                        for _ in 0 .. height {
-                            if mask & 0x8000 == 0x8000 {
-                                print!("{:04x} ", u16::from_be_bytes([buffer[offset_inc], buffer[offset_inc + 1]]));
-                                offset_inc += 2;
-                            };
-                            mask <<= 1;
-                        }
+                    let count = bitmap.iter().fold(0, |acc, &value| acc + value.count_ones()) as usize;
+                    let tile_offset_list: Vec<u32> = buffer[offset .. offset + count * 2]
+                        .chunks(2)
+                        .map(|chunk| {
+                            tile_hi_base_offset + u16::from_be_bytes([chunk[0], chunk[1]]) as u32
+                        })
+                        .collect();
+                    offset += 2 * count;
 
-                        print!("] ");
-                    };
-
-                    offset = offset_inc;
+                    let frame = FrameDefinition::new(palette_id, width, height, bitmap, tile_offset_list);
+                    print!("{}", frame);
                 },
                 0x08 => {
-                    let tile_hi_base_offset = u16::from_be_bytes(buffer[offset .. offset + 2].try_into().unwrap());
+                    let tile_hi_base_offset = (u16::from_be_bytes([buffer[offset], buffer[offset + 1]]) as u32) << 12;
                     offset += 2;
-                    print!("    {:04x} ", tile_hi_base_offset);
 
-                    let mut offset_inc = 0;
-                    for _ in 0 .. width {
-                        let mut mask = buffer[offset];
-                        offset += 1;
+                    let bitmap: Vec<u16> = buffer[offset .. offset + width as usize].iter().map(|value| (*value as u16) << 8).collect();
+                    offset += width as usize;
 
-                        let usize_width = width as usize;
+                    if offset & 1 != 0 { offset += 1; };
 
-                        print!("{:02x}[ ", mask);
+                    let count = bitmap.iter().fold(0, |acc, &value| acc + value.count_ones()) as usize;
+                    let tile_offset_list: Vec<u32> = buffer[offset .. offset + count * 2].chunks(2).map(|chunk| tile_hi_base_offset + (u16::from_be_bytes([chunk[0], chunk[1]])) as u32).collect();
+                    offset += count * 2;
 
-                        for _ in 0 .. height {
-                            if mask & 0x80 == 0x80 {
-                                print!("{:04x} ", u16::from_be_bytes(buffer[offset + usize_width + offset_inc .. offset + usize_width + offset_inc + 2].try_into().unwrap()));
-                                offset_inc += 2;
-                            };
-                            mask <<= 1;
-                        };
-
-                        print!("] ");
-                    };
-
-                    if offset & 1 != 0 {
-                        print!("{:02x} ", buffer[offset]);
-                        offset += 1;
-                    };
-
-                    offset += offset_inc;
+                    let frame = FrameDefinition::new(palette_id, width, height, bitmap, tile_offset_list);
+                    print!("{}", frame);
                 },
                 0x09 => {
-                    let tile_hi_base_offset = u16::from_be_bytes([buffer[offset], buffer[offset + 1]]);
+                    let tile_hi_base_offset = (buffer[offset + 1] as u32) << 12 | (buffer[offset] as u32) << 8;
                     offset += 2;
-                    print!("    {:04x} ", tile_hi_base_offset);
 
-                    let mut offset_inc = 2 * width as usize + offset;
-                    for _ in 0 .. width {
-                        let mut mask = u16::from_be_bytes([buffer[offset], buffer[offset + 1]]);
-                        offset += 2;
-                        print!("{:04x}[ ", mask);
+                    let bitmap: Vec<u16> = buffer[offset .. offset + 2 * width as usize]
+                        .chunks(2)
+                        .map(|chunk| {
+                            u16::from_be_bytes([chunk[0], chunk[1]])
+                        })
+                        .collect();
+                    offset += 2 * width as usize;
 
-                        for _ in 0 .. height {
-                            if mask & 0x8000 == 0x8000 {
-                                print!("{:02x} ", buffer[offset_inc]);
-                                offset_inc += 1;
-                            };
-                            mask <<= 1;
-                        }
+                    let count = bitmap.iter().fold(0, |acc, &value| acc + value.count_ones()) as usize;
+                    let tile_offset_list: Vec<u32> = buffer[offset .. offset + count]
+                        .iter()
+                        .map(|value| { 
+                            tile_hi_base_offset + (*value as u32)
+                        })
+                        .collect();
+                    offset += count;
+                    
+                    if offset & 1 != 0 { offset += 1; };
 
-                        print!("] ");
-                    };
-
-                    offset = offset_inc;
-
-                    if offset & 1 != 0 {
-                        print!("{:02x} ", buffer[offset]);
-                        offset += 1;
-                    };
+                    let frame = FrameDefinition::new(palette_id, width, height, bitmap, tile_offset_list);
+                    print!("{}", frame);
                 },
                 0x0a => {
-                    let tile_hi_base_offset = u16::from_be_bytes(buffer[offset .. offset + 2].try_into().unwrap());
+                    let tile_hi_base_offset = (buffer[offset + 1] as u32) << 12 | (buffer[offset] as u32) << 8;
                     offset += 2;
-                    print!("    {:04x} ", tile_hi_base_offset);
+                    
+                    let bitmap: Vec<u16> = buffer[offset .. offset + width as usize].iter().map(|value| (*value as u16) << 8).collect();
+                    offset += width as usize;
 
-                    let mut offset_inc = 0;
-                    for _ in 0 .. width {
-                        let mut mask = buffer[offset];
-                        offset += 1;
+                    let count = bitmap.iter().fold(0, |acc, &value| acc + value.count_ones()) as usize;
+                    let tile_offset_list: Vec<u32> = buffer[offset .. offset + count].iter().map(|value| tile_hi_base_offset + (*value as u32)).collect();
+                    offset += count;
 
-                        let usize_width = width as usize;
+                    if offset & 1 != 0 { offset += 1; };
 
-                        print!("{:02x}[ ", mask);
-
-                        for _ in 0 .. height {
-                            if mask & 0x80 == 0x80 {
-                                print!("{:02x} ", buffer[offset + usize_width + offset_inc]);
-                                offset_inc += 1;
-                            };
-                            mask <<= 1;
-                        };
-
-                        print!("] ");
-                    };
-
-                    offset += offset_inc;
-
-                    if offset & 1 != 0 {
-                        print!("{:02x} ", buffer[offset]);
-                        offset += 1;
-                    };
+                    let frame = FrameDefinition::new(palette_id, width, height, bitmap, tile_offset_list);
+                    print!("{}", frame);
                 },
                 _ => return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
