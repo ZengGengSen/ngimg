@@ -51,7 +51,7 @@ fn get_all_frame_definition() -> io::Result<()> {
         .for_each(|chunk| chunk.swap(0, 1));
 
     let mut offset = 0x5008c;
-    for _ in 0 .. 23 {
+    for ch_id in 0 .. 0x23 {
         let addr: u32 = u32::from_be_bytes(buffer[offset .. offset + 4].try_into().unwrap());
         offset += 4;
 
@@ -72,7 +72,7 @@ fn get_all_frame_definition() -> io::Result<()> {
             let height = buffer[offset];
             offset += 1;
 
-            print!("{:03x} {:02x} {:02x} {:02x} {:02x} ", i, palette_id, draw_type, width, height);
+            print!("{:02x} {:03x} {:02x} {:02x} {:02x} {:02x} ", ch_id, i, palette_id, draw_type, width, height);
 
             match draw_type {
                 0x00 | 0x04 => {
@@ -125,6 +125,39 @@ fn get_all_frame_definition() -> io::Result<()> {
                         }
                     };
                 },
+                0x05 => {
+                    let mut offset_inc = width as usize * 2 + offset;
+
+                    for _ in 0 .. width {
+                        let mut mask = u16::from_be_bytes([buffer[offset], buffer[offset + 1]]);
+                        offset += 2;
+
+                        print!("{:04x}[ ", mask);
+
+                        let mut swap_toggle = false;
+                        for _ in 0 .. height {
+                            if mask & 0x8000 == 0x8000 {
+                                if swap_toggle {
+                                    print!("{:02x} {:04x} ", buffer[offset_inc], u16::from_be_bytes([buffer[offset_inc + 1], buffer[offset_inc + 2]]));
+                                } else {
+                                    print!("{:04x} {:02x} ", u16::from_be_bytes([buffer[offset_inc], buffer[offset_inc + 1]]), buffer[offset_inc + 2]);
+                                };
+                                offset_inc += 3;
+                            };
+                            swap_toggle = !swap_toggle;
+                            mask <<= 1;
+                        };
+
+                        print!("] ");
+                    };
+
+                    offset = offset_inc;
+
+                    if offset & 1 != 0 {
+                        print!("({:02x})", buffer[offset]);
+                        offset += 1;
+                    };
+                },
                 0x06 => {
                     let mut offset_inc = width as usize + offset;
  
@@ -163,6 +196,7 @@ fn get_all_frame_definition() -> io::Result<()> {
 
                     if offset & 1 != 0 {
                         print!("({:02x})", buffer[offset]);
+                        offset += 1;
                     };
                 },
                 0x07 => {
@@ -290,7 +324,7 @@ fn get_all_frame_definition() -> io::Result<()> {
             print!("\n");
         };
 
-        for i in 0 .. size {
+        for _ in 0 .. size {
             offset += 4;
         };
     }

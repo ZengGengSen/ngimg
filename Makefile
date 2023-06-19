@@ -17,8 +17,9 @@ endif
 all: build
 
 build:
-	cmake -GNinja -Bcmake-build-$(performance) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+	cmake -GNinja -Bcmake-build-$(performance) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 
 	$(call copy,./cmake-build-$(performance)/compile_commands.json,.)
+
 run:
 	ninja -C cmake-build-$(performance)
 	./cmake-build-$(performance)/ngimg
