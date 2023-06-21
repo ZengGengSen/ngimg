@@ -305,12 +305,51 @@ fn get_all_frame_definition() -> io::Result<()> {
 }
 
 fn get_all_tile_info() -> io::Result<()> {
+    let files = [
+        "C:\\Software\\kof97\\232-c1.c1",
+        "C:\\Software\\kof97\\232-c2.c2",
+        "C:\\Software\\kof97\\232-c3.c3",
+        "C:\\Software\\kof97\\232-c4.c4",
+        "C:\\Software\\kof97\\232-c5.c5",
+        "C:\\Software\\kof97\\232-c6.c6",
+    ];
+
+    let mut buffer = Vec::new();
+    for chunk in files.chunks_exact(2) {
+        let mut file1 = File::open(chunk[0])?; 
+        let mut file2 = File::open(chunk[1])?; 
+
+        let mut buffer1 = Vec::new();
+        let mut buffer2 = Vec::new();
+
+        file1.read_to_end(&mut buffer1)?;
+        file2.read_to_end(&mut buffer2)?;
+
+        let size = buffer1.len();
+        buffer.reserve(2 * size);
+        
+        buffer.extend(buffer1.into_iter().zip(buffer2.into_iter()).flat_map(|(b1, b2)| vec![b1, b2]));
+    }
+
+    buffer
+        .chunks_mut(buffer.len() >> 3)
+        .for_each(|tiles| {
+            
+
+        })
+
+
+    let offset = 0x800000;
+    for chunk in buffer[offset .. offset + 0x80].chunks(0x10) {
+        println!("{:02X?}", chunk);
+    }
 
     Ok(())
 }
 
 fn main() -> io::Result<()> {
-    return get_all_tile_info(); 
+    get_all_tile_info() 
+    // get_all_frame_definition()
     // Ok(())
 }
 
