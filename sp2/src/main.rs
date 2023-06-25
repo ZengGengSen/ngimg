@@ -5,6 +5,7 @@ use std::io::{self, Seek, Read};
 use std::{vec, u8, usize};
 use sp2::palette::Palette;
 use sp2::framedef::FrameDefinition;
+use image::{RgbImage, Rgb, GenericImageView, GrayImage, GrayAlphaImage};
 
 fn get_all_palette() -> io::Result<()> {
     let path = "C:\\Software\\kof97\\232-p2.sp2";
@@ -18,7 +19,7 @@ fn get_all_palette() -> io::Result<()> {
 
     let mut full_buffer = vec![0; length as usize];
     file.read_exact(&mut full_buffer)?;
-    
+
     let palette_vec: Vec<Palette> = full_buffer
         .chunks_exact(32)
         .map(|chunk| {
@@ -30,7 +31,7 @@ fn get_all_palette() -> io::Result<()> {
         .expect("Failed to convert palette");
 
     for i in 0 .. 15 {
-       print!("{:04x} ", palette_vec[0x100].color_array[i]); 
+        println!("{:04x} ", palette_vec[0x100].color_array[i]); 
     }
 
     println!("HelloWorld!");
@@ -327,23 +328,73 @@ fn get_all_tile_info() -> io::Result<()> {
 
         let size = buffer1.len();
         buffer.reserve(2 * size);
-        
+
         buffer.extend(buffer1.into_iter().zip(buffer2.into_iter()).flat_map(|(b1, b2)| vec![b1, b2]));
     }
-
-    buffer
-        .chunks_mut(buffer.len() >> 3)
-        .for_each(|tiles| {
-            
-
-        })
-
 
     let offset = 0x800000;
     for chunk in buffer[offset .. offset + 0x80].chunks(0x10) {
         println!("{:02X?}", chunk);
     }
+    
+    let mut data = vec![0; 0x20];
+    let mut img = GrayAlphaImage::new(16, 16);
+    buffer[offset .. offset + 0x80]
+        .chunks_exact_mut(0x80)
+        .for_each(|spr_tile| {
+            for y in 0 .. 0x10 {
+                let mut n = 0;
+                let mut x_pos = 0;
 
+                for x in 0 .. 0x08 {
+                    let mut m = 0;
+
+                    m |= ((spr_tile[0x43 + (y << 2)] >> x) & 1) << 3;
+                    m |= ((spr_tile[0x41 + (y << 2)] >> x) & 1) << 2;
+                    m |= ((spr_tile[0x42 + (y << 2)] >> x) & 1) << 1;
+                    m |= ((spr_tile[0x40 + (y << 2)] >> x) & 1) << 0;
+
+                    n |= (m as u32) << (x << 2);
+
+                    if m == 0 {
+                        img.put_pixel(x_pos, y as u32, image::LumaA([m << 3, 0 as u8]));
+                    } else {
+                        img.put_pixel(x_pos, y as u32, image::LumaA([m << 3, 255]));
+                    }
+                    x_pos += 1;
+                }
+                data[(y << 1) + 0] = n;
+
+                for x in 0 .. 0x08 {
+                    let mut m = 0;
+
+                    m |= ((spr_tile[0x3 + (y << 2)] >> x) & 1) << 3;
+                    m |= ((spr_tile[0x1 + (y << 2)] >> x) & 1) << 2;
+                    m |= ((spr_tile[0x2 + (y << 2)] >> x) & 1) << 1;
+                    m |= ((spr_tile[0x0 + (y << 2)] >> x) & 1) << 0;
+
+                    n |= (m as u32) << (x << 2);
+
+                    if m == 0 {
+                        img.put_pixel(x_pos, y as u32, image::LumaA([m << 3, 0 as u8]));
+                    } else {
+                        img.put_pixel(x_pos, y as u32, image::LumaA([m << 3, 255]));
+                    }
+                    x_pos += 1;
+                }
+                data[(y << 1) + 1] = n;
+            }
+
+            for i in 0 .. 0x20 {
+                let bytes = data[i].to_le_bytes();
+                spr_tile[4 * i + 0] = bytes[0];
+                spr_tile[4 * i + 1] = bytes[1];
+                spr_tile[4 * i + 2] = bytes[2];
+                spr_tile[4 * i + 3] = bytes[3];
+            };
+        });
+
+    img.save("gray_image.png").unwrap();
     Ok(())
 }
 
