@@ -305,96 +305,101 @@ fn get_all_frame_definition() -> io::Result<()> {
     Ok(())
 }
 
+struct Tile {
+    bitmap: Vec<u8>,
+    width: usize,
+    height: usize,
+}
+
+impl Tile {
+    pub fn new(w: usize, h: usize) -> Tile { Tile { bitmap: vec![0; w * h], width: w, height: h } }    
+}
+
+struct ROMInfo {
+    name: &'static str,
+    size: usize
+}
+
+macro_rules! rom_infos {
+    [$({$name:expr, $size:expr},)*] => {
+        [
+            $(ROMInfo {
+                name: $name,
+                size: $size,
+            },)*
+        ]
+    };
+}
+
+/**
+ * @param raw           一个 0x80 的 u8数据
+ * @param data          一个大小为 0x100 的缓存数据
+ */
+fn new_spr_tile(raw: &[u8]) -> io::Result<Tile> {
+    let mut tile = Tile::new(16, 16);
+
+    tile.bitmap.chunks_exact_mut(0x10).enumerate().for_each(|(y, line)| {
+        line.chunks_exact_mut(0x08).enumerate().for_each(|(i, half)| {
+            let base: usize = (i ^ 1) * 0x40 + (y << 2);
+            half.iter_mut().enumerate().for_each(|(x, pixel)| {
+                *pixel |= ((raw[3 + base] >> x) & 1) << 3;
+                *pixel |= ((raw[1 + base] >> x) & 1) << 2;
+                *pixel |= ((raw[2 + base] >> x) & 1) << 1;
+                *pixel |= ((raw[0 + base] >> x) & 1) << 0;
+            });
+        });
+    });
+
+    Ok(tile)
+}
+
 fn get_all_tile_info() -> io::Result<()> {
-    let files = [
-        "C:\\Software\\kof97\\232-c1.c1",
-        "C:\\Software\\kof97\\232-c2.c2",
-        "C:\\Software\\kof97\\232-c3.c3",
-        "C:\\Software\\kof97\\232-c4.c4",
-        "C:\\Software\\kof97\\232-c5.c5",
-        "C:\\Software\\kof97\\232-c6.c6",
+    const ROM_INFOS: [ROMInfo; 6] = rom_infos![ 
+        {"232-c1.c1", 0x800000},
+        {"232-c2.c2", 0x800000},
+        {"232-c3.c3", 0x800000},
+        {"232-c4.c4", 0x800000},
+        {"232-c5.c5", 0x400000},
+        {"232-c6.c6", 0x400000},
     ];
 
-    let mut buffer = Vec::new();
-    for chunk in files.chunks_exact(2) {
-        let mut file1 = File::open(chunk[0])?; 
-        let mut file2 = File::open(chunk[1])?; 
+    let mut buffer = vec![0; 0x80];
+    let mut tiles: Vec<Tile> = Vec::new();
 
-        let mut buffer1 = Vec::new();
-        let mut buffer2 = Vec::new();
+    for info in ROM_INFOS.chunks_exact(2) {
+        let mut file1 = File::open(String::from("C:\\Software\\kof97\\") + info[0].name)?; 
+        let mut file2 = File::open(String::from("C:\\Software\\kof97\\") + info[1].name)?; 
 
-        file1.read_to_end(&mut buffer1)?;
-        file2.read_to_end(&mut buffer2)?;
+        let mut buffer1 = vec!(0; info[0].size);
+        let mut buffer2 = vec!(0; info[0].size);
 
-        let size = buffer1.len();
-        buffer.reserve(2 * size);
+        file1.read_exact(&mut buffer1)?;
+        file2.read_exact(&mut buffer2)?;
 
-        buffer.extend(buffer1.into_iter().zip(buffer2.into_iter()).flat_map(|(b1, b2)| vec![b1, b2]));
+        tiles.extend(buffer1.chunks_exact(0x40).zip(buffer2.chunks_exact(0x40))
+            .flat_map(| (b1, b2) | {
+                buffer.chunks_exact_mut(2).zip(b1.iter().zip(b2.iter()))
+                    .for_each(| (chunk, (bb1, bb2)) | { 
+                        chunk[0] = *bb1; 
+                        chunk[1] = *bb2;
+                    });
+
+                new_spr_tile(&mut buffer)
+            }));
     }
 
-    let offset = 0x800000;
-    for chunk in buffer[offset .. offset + 0x80].chunks(0x10) {
-        println!("{:02X?}", chunk);
-    }
-    
-    let mut data = vec![0; 0x20];
     let mut img = GrayAlphaImage::new(16, 16);
-    buffer[offset .. offset + 0x80]
-        .chunks_exact_mut(0x80)
-        .for_each(|spr_tile| {
-            for y in 0 .. 0x10 {
-                let mut n = 0;
-                let mut x_pos = 0;
 
-                for x in 0 .. 0x08 {
-                    let mut m = 0;
-
-                    m |= ((spr_tile[0x43 + (y << 2)] >> x) & 1) << 3;
-                    m |= ((spr_tile[0x41 + (y << 2)] >> x) & 1) << 2;
-                    m |= ((spr_tile[0x42 + (y << 2)] >> x) & 1) << 1;
-                    m |= ((spr_tile[0x40 + (y << 2)] >> x) & 1) << 0;
-
-                    n |= (m as u32) << (x << 2);
-
-                    if m == 0 {
-                        img.put_pixel(x_pos, y as u32, image::LumaA([m << 3, 0 as u8]));
-                    } else {
-                        img.put_pixel(x_pos, y as u32, image::LumaA([m << 3, 255]));
-                    }
-                    x_pos += 1;
-                }
-                data[(y << 1) + 0] = n;
-
-                for x in 0 .. 0x08 {
-                    let mut m = 0;
-
-                    m |= ((spr_tile[0x3 + (y << 2)] >> x) & 1) << 3;
-                    m |= ((spr_tile[0x1 + (y << 2)] >> x) & 1) << 2;
-                    m |= ((spr_tile[0x2 + (y << 2)] >> x) & 1) << 1;
-                    m |= ((spr_tile[0x0 + (y << 2)] >> x) & 1) << 0;
-
-                    n |= (m as u32) << (x << 2);
-
-                    if m == 0 {
-                        img.put_pixel(x_pos, y as u32, image::LumaA([m << 3, 0 as u8]));
-                    } else {
-                        img.put_pixel(x_pos, y as u32, image::LumaA([m << 3, 255]));
-                    }
-                    x_pos += 1;
-                }
-                data[(y << 1) + 1] = n;
+    let iter = &mut tiles[0x10001].bitmap.iter();
+    for y in 0 .. 16 {
+        for x in 0 .. 16 {
+            if let Some(num) = iter.next() {
+                img.put_pixel(x, y, image::LumaA([*num, if *num != 0 { 255 } else { 0 }]))
             }
-
-            for i in 0 .. 0x20 {
-                let bytes = data[i].to_le_bytes();
-                spr_tile[4 * i + 0] = bytes[0];
-                spr_tile[4 * i + 1] = bytes[1];
-                spr_tile[4 * i + 2] = bytes[2];
-                spr_tile[4 * i + 3] = bytes[3];
-            };
-        });
-
+        }
+    }
     img.save("gray_image.png").unwrap();
+
     Ok(())
 }
 
